@@ -27,7 +27,8 @@ Summary of software requirements:
   * SciPy
   * pigpio (see further explanation below)
   * smbus
-  * Adafruit_BNO055 (BNO055)
+  * Adafruit_Python_BNO055 (BNO055 IMU Modules)
+  * Flask
 * Adafruit_Python_BNO055 library and python interface
   * https://github.com/adafruit/Adafruit_Python_BNO055.git  
 * pigpio library and interfaces
