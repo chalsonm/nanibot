@@ -201,12 +201,17 @@ class MultiprocessInertialSensorBNO055(object):
 
   def __init__(self,calibration_data=None,axis_remap=None,sensor_update_frequency_hz=20.0):
 
-    # Create and configure the BNO sensor connection.
-    # Raspberry Pi configuration with serial UART and RST connected to GPIO 18:
-    self._sensor = BNO055.BNO055(serial_port='/dev/ttyAMA0', rst=18)
+    # Initialize BNO sensor with up to one retry
+    try:
+        # Create and configure the BNO sensor connection.
+        # Raspberry Pi configuration with serial UART and RST connected to GPIO 18:
+        self._sensor = BNO055.BNO055(serial_port='/dev/ttyAMA0', rst=18)
+        self._sensor.begin()
+    except RuntimeError:
+        # Second try, just in case
+        self._sensor = BNO055.BNO055(serial_port='/dev/ttyAMA0', rst=18)
+        self._sensor.begin()
 
-    if not self._sensor.begin():
-      raise RuntimeError('Failed to initialize BNO055!')
     if axis_remap is not None:
       self._sensor.set_axis_remap(**axis_remap)
     if calibration_data is not None:
@@ -242,9 +247,16 @@ class MultiprocessHeadingSensorBNO055(object):
 
   def __init__(self,calibration_data=None,axis_remap=None,sensor_update_frequency_hz=20.0):
 
-    # Create and configure the BNO sensor connection.
-    # Raspberry Pi configuration with serial UART and RST connected to GPIO 18:
-    self._sensor = BNO055.BNO055(serial_port='/dev/ttyAMA0', rst=18)
+    # Initialize BNO sensor with up to one retry
+    try:
+        # Create and configure the BNO sensor connection.
+        # Raspberry Pi configuration with serial UART and RST connected to GPIO 18:
+        self._sensor = BNO055.BNO055(serial_port='/dev/ttyAMA0', rst=18)
+        self._sensor.begin()
+    except RuntimeError:
+        # Second try, just in case
+        self._sensor = BNO055.BNO055(serial_port='/dev/ttyAMA0', rst=18)
+        self._sensor.begin()
 
     if not self._sensor.begin():
       raise RuntimeError('Failed to initialize BNO055!')
