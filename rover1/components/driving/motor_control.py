@@ -47,6 +47,8 @@ class MotorController(object):
 
   def stop(self):
     self._adapter.stop()
+    self._currentFwdBwdSetting = 0
+    self._currentLeftRightSetting = 0
 
   def adjustFwdBwdSetting(self,power_change=0):
     self._currentFwdBwdSetting = max(self._MIN_POWER,min(self._MAX_POWER,self._currentFwdBwdSetting + power_change ))
