@@ -44,6 +44,7 @@ class MotorController(object):
 
   def goStraight(self):
     self._adapter.goStraight()
+    self._currentLeftRightSetting = 0
 
   def stop(self):
     self._adapter.stop()
