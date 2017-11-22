@@ -100,6 +100,10 @@ def read_bno_heading_multiproc(bno, update_frequency_hz, shared_data):
     shared_data[0] := update count
     shared_data[1] := update time
     shared_data[2] := heading
+    shared_data[3] := sys
+    shared_data[4] := gyro
+    shared_data[5] := accel
+    shared_data[6] := mag 
     """
     # update count
     shared_data[0] = 0
@@ -110,7 +114,7 @@ def read_bno_heading_multiproc(bno, update_frequency_hz, shared_data):
         #linX, linY, linZ = bno.read_linear_acceleration()
         heading, roll, pitch = bno.read_euler()
         #x, y, z, w = bno.read_quaternion()
-        #sys, gyro, accel, mag = bno.get_calibration_status()
+        sys, gyro, accel, mag = bno.get_calibration_status()
         #status, self_test, error = bno.get_system_status(run_self_test=False)
         #if error != 0:
         #    print 'Error! Value: {0}'.format(error)
@@ -118,6 +122,10 @@ def read_bno_heading_multiproc(bno, update_frequency_hz, shared_data):
         shared_data[0] += 1
         shared_data[1] = time.time()
         shared_data[2] = heading
+        shared_data[3] = sys
+        shared_data[4] = gyro
+        shared_data[5] = accel
+        shared_data[6] = mag
         # Sleep until the next reading.
         time.sleep(1.0/update_frequency_hz)
 
@@ -265,8 +273,8 @@ class MultiprocessHeadingSensorBNO055(object):
     if calibration_data is not None:
       self._sensor.set_calibration(calibration_data)
 
-    # The 3 elements of the shared memory array are (update count, update time, heading)
-    self._multiproc_shared_data = multiproc.Array('d',3)
+    # The 7 elements of the shared memory array are (update count, update time, heading, sys, gyro, accel, mag)
+    self._multiproc_shared_data = multiproc.Array('d',7)
     self._state = {}
     self.sensor_update_frequency_hz = sensor_update_frequency_hz
 
@@ -291,4 +299,16 @@ class MultiprocessHeadingSensorBNO055(object):
     result['update_count'] = shared_data[0]
     result['update_time'] = shared_data[1]
     result['heading'] = shared_data[2]
+    return result
+  
+  def get_calibration(self):
+     
+    shared_data = self._multiproc_shared_data
+    result = {}
+    result['lookup_time'] = time.time()
+    result['update_time'] = shared_data[1]
+    result['calibration_sys'] = shared_data[3]
+    result['calibration_gyro'] = shared_data[4]
+    result['calibration_accel'] = shared_data[5]
+    result['calibration_mag'] = shared_data[6]
     return result

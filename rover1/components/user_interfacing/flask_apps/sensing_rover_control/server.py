@@ -69,6 +69,7 @@ import components.driving.motor_control as control
 
 # - Define some global variables and constants -
 SENSOR_UPDATE_FREQ_HZ = 2.0
+SENSOR_CALIBRATION_UPDATE_FREQ_HZ = 1.0
 MOTOR_FWD_BWD_STEP_SIZE = 10.0
 MOTOR_LEFT_RIGHT_STEP_SIZE = 5.0
 heading_estimator = None
@@ -76,6 +77,11 @@ motor_controller = None
 
 # Create flask application.
 app = Flask(__name__)
+
+def unwrap_heading(heading):
+    if heading > 180 and heading <= 360:
+        heading = heading - 360
+    return heading
 
 def bno_sse():
     """Function to handle sending BNO055 sensor data to the client web browser
@@ -86,7 +92,6 @@ def bno_sse():
     # Loop forever waiting for a new BNO055 sensor reading and sending it to
     # the client.  Since this is a generator function the yield statement is
     # used to return a new result.
-    heading = 0
     global heading_estimator
     while True:
         time.sleep(1.0 / SENSOR_UPDATE_FREQ_HZ)
@@ -94,7 +99,7 @@ def bno_sse():
         latest_estimate = heading_estimator.getCurrentState()
 
         # Send the data to the connected client in HTML5 server sent event format.
-        data = {'heading': latest_estimate['heading'], 'time': latest_estimate['validity_time']}
+        data = {'heading': unwrap_heading(latest_estimate['heading']), 'time': latest_estimate['validity_time']}
         yield 'data: {0}\n\n'.format(json.dumps(data))
 
 def bno_calibration_sse():
@@ -106,15 +111,18 @@ def bno_calibration_sse():
     # Loop forever waiting for a new BNO055 sensor reading and sending it to
     # the client.  Since this is a generator function the yield statement is
     # used to return a new result.
-    cal_data = 0
+    global heading_estimator
     while True:
-        time.sleep(5)
+        time.sleep(1.0 / SENSOR_CALIBRATION_UPDATE_FREQ_HZ)
 
-        cal_data += 5
+        cal_data = heading_estimator.getCurrentCalibration()
 
         # Send the data to the connected client in HTML5 server sent event format.
-        #data = {'calSys': sys, 'calGyro': gyro, 'calAccel': accel, 'calMag': mag }
-        data = {'calSys': cal_data, 'calGyro': cal_data + 1, 'calAccel': cal_data + 2, 'calMag': cal_data + 3 }
+        data = {
+            'calSys': cal_data['calibration_sys'], 
+            'calGyro': cal_data['calibration_gyro'], 
+            'calAccel': cal_data['calibration_accel'], 
+            'calMag': cal_data['calibration_mag']}
         yield 'data: {0}\n\n'.format(json.dumps(data))
 
 @app.before_first_request

@@ -54,6 +54,7 @@ class HeadingEstimator(object):
         self._sensor = sensor
         self._last_validity_time = time.time()
         self._last_heading = 0
+        self._last_calibration = None
         
     @property
     def last_heading(self):
@@ -69,6 +70,12 @@ class HeadingEstimator(object):
         # - Update state estimates
         self._last_validity_time = meas['update_time']
         self._last_heading = meas['heading']
+    
+    def _updateCalibrationData(self):
+        
+        cal = self._sensor.get_calibration()
+        # - Update state estimates
+        self._last_calibration = cal
         
     def getCurrentState(self):
         self._updateStateEstimates()
@@ -76,3 +83,8 @@ class HeadingEstimator(object):
         return {
             'heading':self.last_heading,
             'validity_time':self.last_validity_time}
+    
+    def getCurrentCalibration(self):
+        self._updateCalibrationData()
+
+        return self._last_calibration 
