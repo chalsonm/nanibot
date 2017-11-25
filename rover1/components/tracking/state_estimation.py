@@ -49,7 +49,7 @@ class StateEstimator(object):
 
 class HeadingEstimator(object):
     
-    def __init__(self,sensor):
+    def __init__(self, sensor):
         
         self._sensor = sensor
         self._last_validity_time = time.time()
@@ -64,27 +64,43 @@ class HeadingEstimator(object):
     def last_validity_time(self):
         return self._last_validity_time
     
-    def _updateStateEstimates(self):
-        
-        meas = self._sensor.get_measurement()
-        # - Update state estimates
-        self._last_validity_time = meas['update_time']
-        self._last_heading = meas['heading']
-    
-    def _updateCalibrationData(self):
-        
-        cal = self._sensor.get_calibration()
-        # - Update state estimates
-        self._last_calibration = cal
-        
-    def getCurrentState(self):
-        self._updateStateEstimates()
+    def getCurrentState(self, wait_for_newest=False):
+        """Get measurement data from the underlying sensor and update state
+
+        Keyword arguments:
+        wait_for_newest -- whether to wait for next reading or get the most recent one(default False)
+
+        Note: if wait_for_newest is True, function will not return until sensor produces new data
+        """
+
+        if wait_for_newest:
+            meas = self._sensor.get_next_measurement()
+        else:
+            meas = self._sensor.get_last_measurement()
+
+        if self._last_validity_time != meas['update_time']:
+            # - perform any required transformations between sensor measurement and State (none at this time)
+
+            # - Update state estimates
+            self._last_validity_time = meas['update_time']
+            self._last_heading = meas['heading']
 
         return {
             'heading':self.last_heading,
             'validity_time':self.last_validity_time}
     
-    def getCurrentCalibration(self):
-        self._updateCalibrationData()
+    def getCurrentCalibration(self, wait_for_newest=False):
+        """Get calibration data from the underlying sensor and update state
+
+        Keyword arguments:
+        wait_for_newest -- whether to wait for next reading or get the most recent one(default False)
+
+        Note: if wait_for_newest is True, function will not return until sensor produces new data
+        """
+
+        if wait_for_newest:
+            self._last_calibration = self._sensor.get_next_calibration()
+        else:
+            self._last_calibration = self._sensor.get_last_calibration()
 
         return self._last_calibration 

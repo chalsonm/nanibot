@@ -94,9 +94,9 @@ def bno_sse():
     # used to return a new result.
     global heading_estimator
     while True:
-        time.sleep(1.0 / SENSOR_UPDATE_FREQ_HZ)
+        #time.sleep(1.0 / SENSOR_UPDATE_FREQ_HZ)
 
-        latest_estimate = heading_estimator.getCurrentState()
+        latest_estimate = heading_estimator.getCurrentState(wait_for_newest=True)
 
         # Send the data to the connected client in HTML5 server sent event format.
         data = {'heading': unwrap_heading(latest_estimate['heading']), 'time': latest_estimate['validity_time']}
@@ -115,7 +115,7 @@ def bno_calibration_sse():
     while True:
         time.sleep(1.0 / SENSOR_CALIBRATION_UPDATE_FREQ_HZ)
 
-        cal_data = heading_estimator.getCurrentCalibration()
+        cal_data = heading_estimator.getCurrentCalibration(wait_for_newest=False)
 
         # Send the data to the connected client in HTML5 server sent event format.
         data = {
