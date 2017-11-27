@@ -31,7 +31,17 @@ from Adafruit_BNO055 import BNO055
 import time
 import threading
 import multiprocessing as multiproc
+import logging
+import os
+import json
+import inspect
 
+
+CALIBRATION_FILE_PATH = 'calibration'
+CALIBRATION_FILE_NAME = 'bno_calibration.json'
+EXECUTION_PATH = os.path.dirname(os.path.abspath(inspect.stack()[0][1]))
+
+logging.getLogger(__name__).addHandler(logging.NullHandler())
 
 def read_bno_threaded(bno, update_frequency_hz, bno_changed, bno_data):
     """Function to read the BNO sensor and update the bno_data object with the
@@ -297,7 +307,7 @@ class MultiprocessInertialSensorBNO055(object):
 
 class MultiprocessHeadingSensorBNO055(object):
 
-  def __init__(self,calibration_data=None,axis_remap=None,sensor_update_frequency_hz=20.0):
+  def __init__(self, calibration_data=None, axis_remap=None, sensor_update_frequency_hz=20.0):
 
     # Initialize BNO sensor with up to one retry
     try:
@@ -338,6 +348,49 @@ class MultiprocessHeadingSensorBNO055(object):
 
   def shutdown(self,timeout=10):
     self._process.join(timeout)
+
+  def load_calibration(self):
+    """Load calibration data from disk and apply it to the sensor"""
+    
+    load_file = os.sep.join([EXECUTION_PATH, CALIBRATION_FILE_PATH, CALIBRATION_FILE_NAME])
+
+    # - Load the calibration data from disk
+    try:
+      with open(load_file, 'r') as file:
+        data = json.load(file)
+      # Grab the lock and set calibration data for the sensor
+      with self._condition:
+        data = self._sensor.set_calibration(data)
+    except IOError as e:
+      if e.errno == 2:
+        # Reasonable error to occur if there has never been a cal file saved
+        logging.getLogger(__name__).warn("Failed to load imu sensor calibration data.  Proceeding anyway.")
+        return
+      else:
+        raise
+    except:
+      # Unexpected error.  Abandon ship!
+      raise
+
+  def save_calibration(self):
+    """Get calibration data from sensor and save to disk for future use"""
+    
+    save_file = os.sep.join([EXECUTION_PATH, CALIBRATION_FILE_PATH, CALIBRATION_FILE_NAME])
+
+    try:
+      # Grab the lock and get calibration data from the sensor
+      with self._condition:
+        data = self._sensor.get_calibration()
+      # Save the calibration data to disk
+      with open(save_file, 'w') as file:
+        json.dump(data, file)
+    except IOError as e:
+      # If saving calibration data fails for this reason, warn and try to proceed
+      logging.getLogger(__name__).warn("Failed to save imu sensor calibration data.  Proceeding anyway.")
+      return
+    except:
+      # Unexpected error.  Abandon ship!
+      raise
 
   def get_last_measurement(self):
     """

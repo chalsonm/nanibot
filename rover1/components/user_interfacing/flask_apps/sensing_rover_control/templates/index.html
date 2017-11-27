@@ -32,12 +32,23 @@
         <div class="row" id="controls">
           <div class="col-sm-4">
             <h3>Orientation (degrees):</h3>
+            <form>
+              <div class="form-row">
+                <div class="form-group">
+                  <div class="btn-group btn-group-justified">
+                    <div class="btn-group">
+                      <button type="button" class="btn btn-primary" id="zeroHeading">Reset to Zero</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </form>
             <h4>Heading = <span id="heading">0</span></h4>
             <h4>Roll = <span id="roll">0</span></h4>
             <h4>Pitch = <span id="pitch">0</span></h4>
           </div>
           <div class="col-sm-4">
-            <h3>Actions:</h3>
+            <h3>Driving:</h3>
             <form>
               <div class="form-row">
                 <div class="form-group">
@@ -73,6 +84,20 @@
           </div>
           <div class="col-sm-4">
             <h3>Calibration:</h3>
+            <form>
+              <div class="form-row">
+                <div class="form-group">
+                  <div class="btn-group btn-group-justified">
+                    <div class="btn-group">
+                      <button type="button" class="btn btn-primary" id="loadCalibration">Load</button>
+                    </div>
+                    <div class="btn-group">
+                      <button type="button" class="btn btn-primary" id="saveCalibration">Save</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </form>
             <h4>(0=uncalibrated, 3=fully calibrated)</h4>
             <h4>System = <span id="calSys">0</span></h4>
             <h4>Gyro = <span id="calGyro">0</span></h4>
@@ -166,6 +191,7 @@
         
         // Global state.
         var startTimeMilliSec = Date.now();
+        var headingOffset = 0;
         var bnoData = null;
         var offset = null;
         var orientation = null;
@@ -229,7 +255,6 @@
             }
           }
           // Update the orientation with the last BNO sensor reading quaternion.
-          // TODO: figure out how to apply the heading measurement to the orientation object
           if (bnoData !== null) {
            //orientation.quaternion.set(bnoData.quatX, bnoData.quatY, bnoData.quatZ, bnoData.quatW);
            orientation.rotation.set(0, 0, -bnoData.heading * (Math.PI / 180.0))
@@ -300,18 +325,18 @@
         });
 
         // Straighten button click handler.
-        // TODO: add straighten button back to UI
-        // TODO: figure out correct straighten procedure for heading-only update
-        $('#straighten').click(function() {
+        $('#zeroHeading').click(function() {
           // Get the current orientation of the BNO sensor and compute its
           // conjugate or reverse rotation and apply it to the offset group.
           // This will reset the 3D model so that it faces directly forward based
           // on the current BNO sensor orientation.
-          var currentQuat = new THREE.Quaternion(bnoData.quatX, bnoData.quatY, bnoData.quatZ, bnoData.quatW);
-          offset.quaternion.copy(currentQuat.conjugate());
+          //var currentQuat = new THREE.Quaternion(bnoData.quatX, bnoData.quatY, bnoData.quatZ, bnoData.quatW);
+          //offset.quaternion.copy(currentQuat.conjugate());
+          headingOffset = bnoData.heading;
+          offset.rotation.set(0, 0, bnoData.heading * (Math.PI / 180.0));
         });
 
-        // Sop button click handler.
+        // Stop button click handler.
         $('#stop').click(function() {
           $.post("{{ url_for('stop_driving') }}");
         });
@@ -341,18 +366,28 @@
           $.post("{{ url_for('stop_turning') }}");
         });
 
+        // Load sensor calibration button click handler.
+        $('#loadCalibration').click(function() {
+          $.post("{{ url_for('load_calibration') }}");
+        });
+        
+        // Save sensor calibration button click handler.
+        $('#saveCalibration').click(function() {
+          $.post("{{ url_for('save_calibration') }}");
+        });
+
         // Function called when a new sensor reading is received.
         function updateSensorData(data) {
           // Save the reading then update the UI.
           bnoData = data;
           bnoData.quatX, bnoData.quatY, bnoData.quatZ, bnoData.quatW = 0, 0, 0, 0
-          $('#heading').text(data.heading);
+          $('#heading').text(data.heading - headingOffset);
           $('#roll').text(0);
           $('#pitch').text(0);
 
           // Update Graphs data
           timeChartRef.data.labels.push(data.time * 1000.0);
-          timeChartRef.data.datasets[0].data.push(data.heading);
+          timeChartRef.data.datasets[0].data.push(data.heading - headingOffset);
           timeChartRef.update();
         }
 

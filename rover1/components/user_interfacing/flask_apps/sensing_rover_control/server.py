@@ -57,21 +57,27 @@ import os
 import inspect
 from flask import Flask, Response, render_template
 
-# add the main rover source tree to sys.path so modules are accessible - 
-rover1_path = rover1_path = os.sep.join(os.path.dirname(os.path.abspath(inspect.stack()[0][1])).split(os.sep)[:-4])
+# configure root logger so messages form other libraries are handled
+logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(levelname)s (%(name)s): %(message)s")
+
+# - add the main rover source tree to sys.path so modules are accessible - 
+rover1_path = os.sep.join(os.path.dirname(os.path.abspath(inspect.stack()[0][1])).split(os.sep)[:-4])
 if rover1_path not in sys.path:
     sys.path.insert(0,rover1_path)
 
+# - import project modules
 import peripherals.bno055_imu.inertial_sensor_bno055 as imu
 import peripherals.sabertooth.sabertooth_adapter as motor
 import components.tracking.state_estimation as state
 import components.driving.motor_control as control
+
 
 # - Define some global variables and constants -
 SENSOR_UPDATE_FREQ_HZ = 2.0
 SENSOR_CALIBRATION_UPDATE_FREQ_HZ = 1.0
 MOTOR_FWD_BWD_STEP_SIZE = 10.0
 MOTOR_LEFT_RIGHT_STEP_SIZE = 5.0
+imu_sensor = None
 heading_estimator = None
 motor_controller = None
 
@@ -94,8 +100,7 @@ def bno_sse():
     # used to return a new result.
     global heading_estimator
     while True:
-        #time.sleep(1.0 / SENSOR_UPDATE_FREQ_HZ)
-
+        # Note: sample rate of sensor will determine how long this function call blocks
         latest_estimate = heading_estimator.getCurrentState(wait_for_newest=True)
 
         # Send the data to the connected client in HTML5 server sent event format.
@@ -133,11 +138,13 @@ def do_before_first_request():
     # See this SO question for more context:
     #   http://stackoverflow.com/questions/24617795/starting-thread-while-running-flask-with-debug
 
-    # Instantiate the IMU heading sensor with global scope
+    # Instantiate the IMU heading sensor and heading estimator with global scope
+    global imu_sensor
     global heading_estimator
-    heading_estimator = state.HeadingEstimator(
-        imu.MultiprocessHeadingSensorBNO055(
-            sensor_update_frequency_hz=SENSOR_UPDATE_FREQ_HZ))
+
+    imu_sensor = imu.MultiprocessHeadingSensorBNO055(
+        sensor_update_frequency_hz=SENSOR_UPDATE_FREQ_HZ)
+    heading_estimator = state.HeadingEstimator(imu_sensor)
     
     # Instantiate the motor controller with global scope
     global motor_controller
@@ -154,6 +161,18 @@ def bno_calibration_path():
     # Return SSE response and call bno_calibration_sse function to stream sensor calibration
     # data to the webpage.
     return Response(bno_calibration_sse(), mimetype='text/event-stream')
+
+@app.route('/load_calibration', methods=['POST'])
+def load_calibration():
+    global imu_sensor
+    imu_sensor.load_calibration()
+    return 'OK'
+
+@app.route('/save_calibration', methods=['POST'])
+def save_calibration():
+    global imu_sensor
+    imu_sensor.save_calibration()
+    return 'OK'
 
 @app.route('/stop_driving', methods=['POST'])
 def stop_driving():
