@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+        <title>Sensing Rover UI</title>
+        <meta name="description" content="Flask test page derived from Adafruit_Python_BNO055 webgl_demo">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+
+        <link href="{{ url_for('static', filename='css/bootstrap.min.css') }}" rel="stylesheet">
+        <link href="{{ url_for('static', filename='css/rover.css') }}" rel="stylesheet">
+        <style>
+            body {
+              padding-top: 50px;
+              padding-bottom: 20px;
+            }
+        </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="row">
+          <div class="col-sm-12">
+            <h1 class="text-center">Sensing Rover UI</h1>
+            <h3 id="connecting">Connecting...</h3>
+            <div class="col-sm-6" id="renderer">
+            </div>
+            <div class="col-sm-6" id="graphs">
+              <canvas id="graphsCanvas">
+              </canvas>
+            </div>
+          </div>
+        </div>
+        <div class="row" id="controls">
+          <div class="col-sm-4">
+            <h3>Orientation (degrees):</h3>
+            <form>
+              <div class="form-row">
+                <div class="form-group">
+                  <div class="btn-group btn-group-justified">
+                    <div class="btn-group">
+                      <button type="button" class="btn btn-primary" id="zeroHeading">Reset to Zero</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </form>
+            <h4>Heading = <span id="heading">0</span></h4>
+            <h4>Roll = <span id="roll">0</span></h4>
+            <h4>Pitch = <span id="pitch">0</span></h4>
+          </div>
+          <div class="col-sm-4">
+            <h3>Driving:</h3>
+            <form>
+              <div class="form-row">
+                <div class="form-group">
+                  <button type="button" class="btn btn-danger btn-block" id="stop">STOP !</button>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <button type="button" class="btn btn-primary btn-block" id="increaseSpeed">Accelerate</button>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <div class="btn-group btn-group-justified">
+                    <div class="btn-group">
+                      <button type="button" class="btn btn-primary" id="turnLeft">Left</button>
+                    </div>
+                    <div class="btn-group">
+                      <button type="button" class="btn btn-primary" id="stopTurning">Center</button>
+                    </div>
+                    <div class="btn-group">
+                      <button type="button" class="btn btn-primary" id="turnRight">Right</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <button type="button" class="btn btn-primary btn-block" id="decreaseSpeed">Decelerate</button>
+                </div>
+              </div>
+            </form>
+          </div>
+          <div class="col-sm-4">
+            <h3>Calibration:</h3>
+            <form>
+              <div class="form-row">
+                <div class="form-group">
+                  <div class="btn-group btn-group-justified">
+                    <div class="btn-group">
+                      <button type="button" class="btn btn-primary" id="loadCalibration">Load</button>
+                    </div>
+                    <div class="btn-group">
+                      <button type="button" class="btn btn-primary" id="saveCalibration">Save</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </form>
+            <h4>(0=uncalibrated, 3=fully calibrated)</h4>
+            <h4>System = <span id="calSys">0</span></h4>
+            <h4>Gyro = <span id="calGyro">0</span></h4>
+            <h4>Accelerometer = <span id="calAccel">0</span></h4>
+            <h4>Magnetometer = <span id="calMag">0</span></h4>
+          </div>
+        </div>
+      </div>
+      <script src="{{ url_for('static', filename='js/jquery-2.1.4.min.js') }}"></script>
+      <script src="{{ url_for('static', filename='js/three.min.js') }}"></script>
+      <script src="{{ url_for('static', filename='js/DDSLoader.js') }}"></script>
+      <script src="{{ url_for('static', filename='js/MTLLoader.js') }}"></script>
+      <script src="{{ url_for('static', filename='js/OBJMTLLoader.js') }}"></script>
+      <script src="{{ url_for('static', filename='js/OBJLoader.js') }}"></script>
+      <script src="{{ url_for('static', filename='js/STLLoader.js') }}"></script>
+      <script src="{{ url_for('static', filename='js/bootstrap.min.js') }}"></script>
+      <script src="{{ url_for('static', filename='js/Chart.bundle.min.js') }}"></script>
+      <script>
+      $(document).ready(function() {
+        // Configuration
+        // Set size of the WebGL renderer scene.
+        //var sceneWidth = 640;
+        //var sceneHeight = 480;
+        var sceneWidth = 320*1.25;
+        var sceneHeight = 320*1.25;
+
+        // Define list of 3D models.  Each item should have a name property that
+        // will be rendered in the drop down, and a load function that is called
+        // with the model instance and should add a model property with a Three.js
+        // scene graph object that will be rendered.
+        var models = [
+          {
+            name: 'Bunny',
+            load: function(model) {
+              objMTLLoader.load(
+                '{{ url_for('static', filename='bunny.obj') }}',
+                '{{ url_for('static', filename='bunny.mtl') }}',
+                function(object) {
+                  var geom = object.children[1].geometry;
+                  // Rebuild geometry normals because they aren't loaded properly.
+                  geom.computeFaceNormals();
+                  geom.computeVertexNormals();
+                  // Build bunny mesh from geometry and material.
+                  model.model = new THREE.Mesh(geom, material);
+                  // Move the bunny so it's roughly in the center of the screen.
+                  model.model.rotation.x = 90.0 * (Math.PI / 180.0);
+                  model.model.rotation.y = -90.0 * (Math.PI / 180.0);
+                  //model.model.position.y = -4;
+                }
+              );
+            }
+          },
+          {
+            name: 'Cat Statue',
+            load: function(model) {
+              stlLoader.load(
+                '{{ url_for('static', filename='cat-top.stl') }}',
+                function(geometry) {
+                  // Regenerate normals because they aren't loaded properly.
+                  geometry.computeFaceNormals();
+                  geometry.computeVertexNormals();
+                  // Load the model and build mesh.
+                  model.model = new THREE.Mesh(geometry, material);
+                  // Rotate, scale, and move so the cat is facing out the screen.
+                  model.model.rotation.x = -90 * (Math.PI / 180.0);
+                  model.model.scale.set(0.15, 0.15, 0.15);
+                  model.model.position.y = -4;
+                }
+              );
+            }
+          },
+          {
+            name: 'XYZ Axes',
+            load: function(model) {
+              // Build some cylinders and rotate them to form a cross of the XYZ axes.
+              model.model = new THREE.Group();
+              var xAxis = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 7, 32, 32),
+                                             material);
+              xAxis.rotation.z = 90.0*(Math.PI/180.0);
+              model.model.add(xAxis);
+              var yAxis = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 7, 32, 32),
+                                             material);
+              model.model.add(yAxis);
+              var zAxis = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 7, 32, 32),
+                                             material);
+              zAxis.rotation.x = 90.0*(Math.PI/180.0);
+              model.model.add(zAxis);
+            }
+          }
+        ];
+        
+        // Global state.
+        var startTimeMilliSec = Date.now();
+        var headingOffset = 0;
+        var bnoData = null;
+        var offset = null;
+        var orientation = null;
+        var objMTLLoader = new THREE.OBJMTLLoader();
+        var stlLoader = new THREE.STLLoader();
+        var currentModel = null;
+        var timeChartRef = null;
+
+        // Start with main controls hidden until connected.
+        $('#controls').hide();
+
+        // Setup Three.js scene and camera.
+        var scene = new THREE.Scene();
+        var camera = new THREE.PerspectiveCamera(75, sceneWidth / sceneHeight, 0.1, 1000);
+        // Start with the camera moved back a bit to look directly at the origin.
+        camera.position.z = 20;
+        
+        // Setup Three.js WebGL renderer and add it to the page.
+        var renderer = new THREE.WebGLRenderer();
+        renderer.setSize(sceneWidth, sceneHeight);
+        renderer.setClearColor(0xff0000, 0);
+        $('#renderer').append(renderer.domElement);
+        $('#renderer canvas').addClass('left-block');  // Left-justify the renderer.
+        
+        // Create white material for the models.
+        var material = new THREE.MeshPhongMaterial({ color: 0xffffff });
+
+        // Setup 3 point lighting with a red and blue point light in upper left
+        // and right corners, plus a bit of backlight from the rear forward.
+        var pointLight1 = new THREE.PointLight(0xffbbbb, 0.6);
+        // Red-er
+        //var pointLight1 = new THREE.PointLight(0xff5555, 0.6);
+        pointLight1.position.set(40, 15, 40);
+        scene.add(pointLight1);
+        var pointLight2 = new THREE.PointLight(0xbbbbff, 0.7);
+        pointLight2.position.set(-40, 15, 40);
+        scene.add(pointLight2);
+        var backLight = new THREE.DirectionalLight(0xffff, 0.3);
+        backLight.position.set(0, -0.25, -1);
+        scene.add(backLight);
+
+        // Create a couple groups to apply rotations to the 3D model at different
+        // stages.  The outer group called offset is set to the reverse rotation
+        // of the current BNO orientation when the 'Straighten' button is clicked.
+        // This will force the model to center itself staring directly out of
+        // the screen.  The inner group called orientation will be rotated with
+        // the current BNO sensor orientation and cause the model to rotate.
+        offset = new THREE.Group();
+        orientation = new THREE.Group();
+        offset.add(orientation);
+        scene.add(offset);
+
+        // Main rendering function.
+        function render() {
+          requestAnimationFrame(render);
+          // Switch to the first model once it's loaded.
+          if (currentModel === null) {
+            if (models[0].hasOwnProperty('model')) {
+              currentModel = 0;
+              orientation.add(models[0].model);
+            }
+          }
+          // Update the orientation with the last BNO sensor reading quaternion.
+          if (bnoData !== null) {
+           //orientation.quaternion.set(bnoData.quatX, bnoData.quatY, bnoData.quatZ, bnoData.quatW);
+           orientation.rotation.set(0, 0, -bnoData.heading * (Math.PI / 180.0))
+          }
+          renderer.render(scene, camera);
+        }
+        render();
+
+        // Create and initialize graphing canvas
+        $('#graphs canvas').addClass('right-block');  // Right-justify the graphs.
+        //$('#graphs canvas').attr('id', 'graphsCanvas');
+        
+        function renderGraph(graphData) {
+          var ctx = document.getElementById("graphsCanvas").getContext("2d");
+          ctx.canvas.width = sceneWidth;
+          ctx.canvas.height = sceneHeight * 0.8; // Leaving extra room for autoformating of x-axis labels
+          var options = {
+            scales: {
+              xAxes: [{
+                type: 'time',
+                time: {
+                  unit: 'second' 
+                }
+              }]
+            } 
+          };
+          timeChartRef = new Chart(ctx, {
+            type: "line",
+            data: graphData,
+            options: options
+          });
+        }
+
+        // Initialize chart config
+        var chartConfig = {
+          labels: [startTimeMilliSec],
+          datasets: [
+            {
+             label: "Heading Data",
+             fill: false,
+             lineTension: 0.1,
+             backgroundColor: "rgba(75,192,192,0.4)",
+             borderColor: "rgba(75,192,192,1)",
+             borderCapStyle: 'butt',
+             borderDash: [],
+             borderDashOffset: 0.0,
+             borderJoinStyle: 'miter',
+             pointBorderColor: "rgba(75,192,192,1)",
+             pointBackgroundColor: "#fff",
+             pointBorderWidth: 1,
+             pointHoverRadius: 5,
+             pointHoverBackgroundColor: "rgba(75,192,192,1)",
+             pointHoverBorderColor: "rgba(220,220,220,1)",
+             pointHoverBorderWidth: 2,
+             pointRadius: 1,
+             pointHitRadius: 10,
+             data: [0],
+             spanGaps: false,
+            }
+          ]
+        };
+        renderGraph(chartConfig);
+
+        // Populate drop-down of 3D models and load all the models..
+        $.each(models, function(index, model) {
+          // Kick off loading the model.
+          model.load(model);
+        });
+
+        // Straighten button click handler.
+        $('#zeroHeading').click(function() {
+          // Get the current orientation of the BNO sensor and compute its
+          // conjugate or reverse rotation and apply it to the offset group.
+          // This will reset the 3D model so that it faces directly forward based
+          // on the current BNO sensor orientation.
+          //var currentQuat = new THREE.Quaternion(bnoData.quatX, bnoData.quatY, bnoData.quatZ, bnoData.quatW);
+          //offset.quaternion.copy(currentQuat.conjugate());
+          headingOffset = bnoData.heading;
+          offset.rotation.set(0, 0, bnoData.heading * (Math.PI / 180.0));
+        });
+
+        // Stop button click handler.
+        $('#stop').click(function() {
+          $.post("{{ url_for('stop_driving') }}");
+        });
+
+        // Incrementally increase forward speed
+        $('#increaseSpeed').click(function() {
+          $.post("{{ url_for('increase_speed') }}");
+        });
+        
+        // Incrementally decrease forward speed
+        $('#decreaseSpeed').click(function() {
+          $.post("{{ url_for('decrease_speed') }}");
+        });
+        
+        // Incrementally turn more leftward
+        $('#turnLeft').click(function() {
+          $.post("{{ url_for('turn_more_left') }}");
+        });
+        
+        // Incrementally turn more leftward
+        $('#turnRight').click(function() {
+          $.post("{{ url_for('turn_more_right') }}");
+        });
+        
+        // Incrementally turn more leftward
+        $('#stopTurning').click(function() {
+          $.post("{{ url_for('stop_turning') }}");
+        });
+
+        // Load sensor calibration button click handler.
+        $('#loadCalibration').click(function() {
+          $.post("{{ url_for('load_calibration') }}");
+        });
+        
+        // Save sensor calibration button click handler.
+        $('#saveCalibration').click(function() {
+          $.post("{{ url_for('save_calibration') }}");
+        });
+
+        // Function called when a new sensor reading is received.
+        function updateSensorData(data) {
+          // Save the reading then update the UI.
+          bnoData = data;
+          bnoData.quatX, bnoData.quatY, bnoData.quatZ, bnoData.quatW = 0, 0, 0, 0
+          $('#heading').text(data.heading - headingOffset);
+          $('#roll').text(0);
+          $('#pitch').text(0);
+
+          // Update Graphs data
+          timeChartRef.data.labels.push(data.time * 1000.0);
+          timeChartRef.data.datasets[0].data.push(data.heading - headingOffset);
+          timeChartRef.update();
+        }
+
+        // Create server sent event connection to receive BNO sensor data.
+        var server = new EventSource('/bno');
+        // Add server sent event handlers.
+        server.onmessage = function(e) {
+          // Update BNO sensor values.
+          updateSensorData(JSON.parse(e.data));
+        };
+        server.onopen = function(e) {
+          // Hide connecting status and show controls when connection is made.
+          $('#connecting').hide();
+          $('#controls').show();
+        };
+        server.onerror = function(e) {
+          // Hide controls and show connecting status if connection closes.
+          $('#controls').hide();
+          $('#connecting').show();
+        };
+        
+        // Function called when a new sensor calibration update is received.
+        function updateSensorCalibrationData(data) {
+          // Save the reading then update the UI.
+          bnoCalibrationData = data;
+          $('#calSys').text(data.calSys);
+          $('#calGyro').text(data.calGyro);
+          $('#calAccel').text(data.calAccel);
+          $('#calMag').text(data.calMag);
+        }
+
+        // Create server sent event connection to receive BNO sensor data.
+        var calibration_server = new EventSource('/bno_calibration');
+        // Add server sent event handlers.
+        calibration_server.onmessage = function(e) {
+          // Update BNO sensor values.
+          updateSensorCalibrationData(JSON.parse(e.data));
+        };
+      });
+      </script>
+    </body>
+</html>
