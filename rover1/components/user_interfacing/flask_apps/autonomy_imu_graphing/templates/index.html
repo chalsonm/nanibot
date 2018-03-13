@@ -2,7 +2,7 @@
     <head>
         <meta charset="utf-8">
         <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
-        <title>Sensing Rover UI</title>
+        <title>Autonomous Rover UI (IMU Graphing)</title>
         <meta name="description" content="Flask test page derived from Adafruit_Python_BNO055 webgl_demo">
         <meta name="viewport" content="width=device-width, initial-scale=1">
 
@@ -19,7 +19,7 @@
       <div class="container">
         <div class="row">
           <div class="col-sm-12">
-            <h1 class="text-center">Sensing Rover UI</h1>
+            <h1 class="text-center">Autonomous Rover UI (IMU Graphing)</h1>
             <h3 id="connecting">Connecting...</h3>
             <div class="col-sm-6" id="renderer">
             </div>
@@ -31,24 +31,7 @@
         </div>
         <div class="row" id="controls">
           <div class="col-sm-4">
-            <h3>Orientation (degrees):</h3>
-            <form>
-              <div class="form-row">
-                <div class="form-group">
-                  <div class="btn-group btn-group-justified">
-                    <div class="btn-group">
-                      <button type="button" class="btn btn-primary" id="zeroHeading">Reset to Zero</button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </form>
-            <h4>Heading = <span id="heading">0</span></h4>
-            <h4>Roll = <span id="roll">0</span></h4>
-            <h4>Pitch = <span id="pitch">0</span></h4>
-          </div>
-          <div class="col-sm-4">
-            <h3>Driving:</h3>
+            <h3>Manual Override</h3>
             <form>
               <div class="form-row">
                 <div class="form-group">
@@ -83,7 +66,28 @@
             </form>
           </div>
           <div class="col-sm-4">
-            <h3>Calibration:</h3>
+            <h3>Autonomous Mission</h3>
+            <form>
+              <div class="form-row">
+                <div class="form-group">
+                  <button type="button" class="btn btn-primary btn-block" id="suspendAutonomy">Manual</button>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <button type="button" class="btn btn-primary btn-block" id="startHeadingSeekerAutonomy">Heading Seeker</button>
+                </div>
+              </div>
+            </form>
+          </div>
+          <div class="col-sm-4">
+            <h3>Mission Parameters</h3>
+            <!-- Add element to be auto-generated based on selected Mission --> 
+          </div>
+        </div>
+        <div class="row" id="configuration">
+          <div class="col-sm-6">
+            <h3>Sensor Calibration</h3>
             <form>
               <div class="form-row">
                 <div class="form-group">
@@ -103,6 +107,23 @@
             <h4>Gyro = <span id="calGyro">0</span></h4>
             <h4>Accelerometer = <span id="calAccel">0</span></h4>
             <h4>Magnetometer = <span id="calMag">0</span></h4>
+          </div>
+          <div class="col-sm-6">
+            <h3>Orientation (degrees)</h3>
+            <form>
+              <div class="form-row">
+                <div class="form-group">
+                  <div class="btn-group btn-group-justified">
+                    <div class="btn-group">
+                      <button type="button" class="btn btn-primary" id="zeroHeading">Reset to Zero</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </form>
+            <h4>Heading = <span id="heading">0</span></h4>
+            <h4>Roll = <span id="roll">0</span></h4>
+            <h4>Pitch = <span id="pitch">0</span></h4>
           </div>
         </div>
       </div>
@@ -201,7 +222,7 @@
         var timeChartRef = null;
 
         // Start with main controls hidden until connected.
-        $('#controls').hide();
+        //$('#controls').hide();
 
         // Setup Three.js scene and camera.
         var scene = new THREE.Scene();
@@ -235,8 +256,8 @@
 
         // Create a couple groups to apply rotations to the 3D model at different
         // stages.  The outer group called offset is set to the reverse rotation
-        // of the current BNO orientation when the 'Straighten' button is clicked.
-        // This will force the model to center itself staring directly out of
+        // of the current BNO orientation when the 'Reset to Zero' button is clicked.
+        // This will force the model to center itself staring towards the top of
         // the screen.  The inner group called orientation will be rotated with
         // the current BNO sensor orientation and cause the model to rotate.
         offset = new THREE.Group();
@@ -366,6 +387,16 @@
           $.post("{{ url_for('stop_turning') }}");
         });
 
+        // Suspend autonomy
+        $('#suspendAutonomy').click(function() {
+          $.post("{{ url_for('stop_turning') }}");
+        });
+
+        // Start heading seeker mission
+        $('#startHeadingSeekerAutonomy').click(function() {
+          $.post("{{ url_for('stop_turning') }}");
+        });
+
         // Load sensor calibration button click handler.
         $('#loadCalibration').click(function() {
           $.post("{{ url_for('load_calibration') }}");
@@ -401,11 +432,11 @@
         server.onopen = function(e) {
           // Hide connecting status and show controls when connection is made.
           $('#connecting').hide();
-          $('#controls').show();
+          //$('#controls').show();
         };
         server.onerror = function(e) {
           // Hide controls and show connecting status if connection closes.
-          $('#controls').hide();
+          //$('#controls').hide();
           $('#connecting').show();
         };
         
