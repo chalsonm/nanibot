@@ -70,16 +70,21 @@ import peripherals.bno055_imu.inertial_sensor_bno055 as imu
 import peripherals.sabertooth.sabertooth_adapter as motor
 import components.tracking.state_estimation as state
 import components.driving.motor_control as control
+import components.driving.feedback_control as feedback
 
 
 # - Define some global variables and constants -
 SENSOR_UPDATE_FREQ_HZ = 2.0
 SENSOR_CALIBRATION_UPDATE_FREQ_HZ = 1.0
+FEEDBACK_CONTROL_UPDATE_INTERVAL_SEC = 0.1
+FEEDBACK_UI_REPORTING_INTERVAL_SEC = 2.0
+FEEDBACK_CONTROLLER_P_GAIN = 4.0
 MOTOR_FWD_BWD_STEP_SIZE = 10.0
 MOTOR_LEFT_RIGHT_STEP_SIZE = 5.0
 imu_sensor = None
 heading_estimator = None
 motor_controller = None
+feedback_control_system = None
 
 # Create flask application.
 app = Flask(__name__)
@@ -130,6 +135,40 @@ def bno_calibration_sse():
             'calMag': cal_data['calibration_mag']}
         yield 'data: {0}\n\n'.format(json.dumps(data))
 
+def feedback_control_system_sse():
+    """Function to handle sending feedback control system data to the client web browser
+    using HTML5 server sent events (aka server push).  This is a generator function
+    that flask will run in a thread and call to get new data that is pushed to
+    the client web page.
+    """
+    # Loop forever waiting for a new BNO055 sensor reading and sending it to
+    # the client.  Since this is a generator function the yield statement is
+    # used to return a new result.
+    global feedback_control_system
+    while True:
+        time.sleep(FEEDBACK_UI_REPORTING_INTERVAL_SEC)
+
+        try:
+            # Send the data to the connected client in HTML5 server sent event format.
+            data = {'setPoint': feedback_control_system.set_point()}
+            yield 'data: {0}\n\n'.format(json.dumps(data))
+        except:
+            # This exception probably occurred because the rover is in Manual mode
+            pass
+
+def run_feedback_control_loop():
+    logging.getLogger(__name__).info("initiating feedback control loop") 
+    global feedback_control_system
+
+    while True:
+        time.sleep(FEEDBACK_CONTROL_UPDATE_INTERVAL_SEC)
+        try:
+            if feedback_control_system is None:
+                continue
+            feedback_control_system.update_plant_command()
+        except:
+            pass
+
 @app.before_first_request
 def do_before_first_request():
     # Do something right before the first request is served.  This is
@@ -149,6 +188,12 @@ def do_before_first_request():
     # Instantiate the motor controller with global scope
     global motor_controller
     motor_controller = control.MotorController(motor.SabertoothPacketizedAdapterGPIO())
+     
+    feedback_control_thread = threading.Thread(
+      target=run_feedback_control_loop,
+      args=())
+    feedback_control_thread.daemon = True  # Don't let the thread block exiting.
+    feedback_control_thread.start()
 
 @app.route('/bno')
 def bno_path():
@@ -218,6 +263,38 @@ def stop_turning():
     motor_controller.goStraight()
     return 'OK'
 
+@app.route('/start_feedback_control_system', methods=['POST'])
+def start_feedback_control_system():
+    global motor_controller 
+    global heading_estimator 
+    global feedback_control_system
+
+    if feedback_control_system is not None:
+        return 'OK'
+
+    # Lookup current heading
+    state = heading_estimator.getCurrentState()
+    # TODO: add getter to motor_controller
+    initial_forward_speed = motor_controller._currentFwdBwdSetting
+
+    feedback_control_system = feedback.HeadingFeedbackController(
+        heading_estimator, # observer
+        motor_controller, # motor_controller
+        None, # update_interval_sec
+        FEEDBACK_CONTROLLER_P_GAIN, #proportional_gain
+        0.0, # integral_gain
+        measurement_offset=0,
+        initial_state=state['heading'],
+        nominal_forward_power=initial_forward_speed,
+        verbose=False)
+    return 'OK'
+
+@app.route('/suspend_feedback_control_system', methods=['POST'])
+def suspend_feedback_control_system():
+    global feedback_control_system
+    feedback_control_system = None
+    return 'OK'
+
 @app.route('/')
 def root():
     return render_template('index.html')
@@ -228,4 +305,5 @@ if __name__ == '__main__':
     # reloading of the server on changes.  Also make the server threaded
     # so multiple connections can be processed at once (very important
     # for using server sent events).
-    app.run(host='0.0.0.0', port=5000, debug=True, threaded=True)
+    app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
+

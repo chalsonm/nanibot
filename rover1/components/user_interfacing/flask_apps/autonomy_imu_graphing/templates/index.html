@@ -389,12 +389,12 @@
 
         // Suspend autonomy
         $('#suspendAutonomy').click(function() {
-          $.post("{{ url_for('stop_turning') }}");
+          $.post("{{ url_for('suspend_feedback_control_system') }}");
         });
 
         // Start heading seeker mission
         $('#startHeadingSeekerAutonomy').click(function() {
-          $.post("{{ url_for('stop_turning') }}");
+          $.post("{{ url_for('start_feedback_control_system') }}");
         });
 
         // Load sensor calibration button click handler.
