@@ -4,12 +4,18 @@ This module is a collection of classes and functions related to simple, classica
 
 from __future__ import division
 import time
+import logging
 import multiprocessing as multiproc
+from copy import deepcopy
 
 import peripherals.bno055_imu.inertial_sensor_bno055 as imu
 import peripherals.sabertooth.sabertooth_adapter as sabertooth_adapter
 import components.driving.motor_control as motor_control
 import components.tracking.state_estimation as state_estimation
+
+
+logging.getLogger(__name__).addHandler(logging.NullHandler())
+
 
 class FeedbackControlSystemManager(object):
     
@@ -111,16 +117,16 @@ class HeadingFeedbackController(object):
         self._observer = observer
         # Set motor controller and ensure that we're initially not driving
         self._motor_controller = motor_controller
-        self._nominal_forward_power = nominal_forward_power
+        self._nominal_forward_power = float(nominal_forward_power)
         self._motor_controller.stop()
         self._driving = False
         
         # Set the feedback gains
-        self._P_gain = proportional_gain
-        self._I_gain = integral_gain
+        self._P_gain = float(proportional_gain)
+        self._I_gain = float(integral_gain)
         
         # Set the measurement calibration offset
-        self._measurement_offset = measurement_offset
+        self._measurement_offset = float(measurement_offset)
         
         # Initialize last observer time as current time
         self._last_observer_update_time = time.time()
@@ -129,20 +135,40 @@ class HeadingFeedbackController(object):
         # Keep track of initial invocation time, for logging and debugging
         self._start_time = time.time()
         
-        self._set_point = initial_state
-        self._last_heading_estimate = initial_state
-        self._last_plant_command = initial_state
-        self._cumulative_error = 0
+        self._set_point = float(initial_state)
+        self._last_heading_estimate = self._set_point
+        self._last_plant_command = self._set_point
+        self._cumulative_error = 0.0
         
         
     @property
     def set_point(self):
         return self._set_point
     
-    def update_set_point(self,set_point):
+    @property
+    def measurement_offset(self):
+        return self._measurement_offset
+    
+    def update_set_point(self, set_point):
         """TODO: add safety limits"""
-        self._set_point = set_point
+        self._set_point = float(set_point) % 360.0
         
+    def update_measurement_offset(self, offset):
+        """TODO: add safety limits"""
+        self._measurement_offset = float(offset) % 360.0
+    
+    def get_observed_state(self):
+        return self._observer.getCurrentState()
+
+    def get_corrected_observed_state(self):
+        """
+        Subtract measurement offsets from observed state then return the result
+        Note: at this time, measurement offset is a scalar, representing the heading offset only
+        """
+        result = deepcopy(self._observer.getCurrentState())
+        result['heading'] -= self._measurement_offset
+        return result
+    
     def update_plant_command(self):
         """
         Attempt to update the motor controller command, send stop command if something goes wrong
@@ -160,6 +186,7 @@ class HeadingFeedbackController(object):
             heading_change = new_plant_command - old_plant_command
             self._motor_controller.adjustLeftRightSetting(heading_change)
         except:
+            logging.getLogger(__name__).warn("Failed to update plant command.  Sending stop command to motor controller.")
             self._motor_controller.stop()
             raise
         
@@ -176,8 +203,8 @@ class HeadingFeedbackController(object):
         
     def _get_new_plant_command(self):
         # Compute new motor command from proportional feedback
-        observer_data = self._observer.getCurrentState()
-        state_validity_time = observer_data['validity_time']
+        corrected_observed_state = self.get_corrected_observed_state()
+        state_validity_time = corrected_observed_state['validity_time']
         
         # If observer data is too old, raise exception that should shut down the motors
         current_time = time.time()
@@ -192,15 +219,15 @@ class HeadingFeedbackController(object):
         # - Should raise ValueError otherwise
         gain = float(self._P_gain)
         set_point = float(self.set_point)
-        calibrated_state_estimate = float(observer_data['heading']) - float(self._measurement_offset)
+        corrected_heading_estimate = corrected_observed_state['heading']
         
         # --- Proportional Error Feedback ---
-        new_plant_command = gain * self._get_control_error(calibrated_state_estimate,set_point)
+        new_plant_command = gain * self._get_control_error(corrected_heading_estimate, set_point)
         if self._verbose:
             print '\n\ntime: {}\nset point: {}\ncalibrated observer heading: {}, \nnew command: {}'.format(
                 current_time - self._start_time,
                 set_point,
-                calibrated_state_estimate,
+                corrected_heading_estimate,
                 new_plant_command)
             
         return new_plant_command

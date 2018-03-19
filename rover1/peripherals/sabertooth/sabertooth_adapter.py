@@ -140,7 +140,7 @@ class SabertoothPacketizedAdapter(object):
 
   # ---- Main External Methods for Affecting Moter Behavior ----
   def stop(self):
-    logging.getLogger(__name__).info("motor stop")
+    logging.getLogger(__name__).debug("motor stop")
     self._send_packet(
       self._get_packet_for_command(
         M1_FWD,0))
@@ -150,31 +150,31 @@ class SabertoothPacketizedAdapter(object):
 
   def goForward(self,power_percent=0):
     pwr = min(80,max(0,power_percent))
-    logging.getLogger(__name__).info("motor goForward - {}% power".format(pwr))
+    logging.getLogger(__name__).debug("motor goForward - {}% power".format(pwr))
     command_data = MIXED_FWD_MIN + 0.01 * pwr * (MIXED_FWD_MAX - MIXED_FWD_MIN)
     self._send_packet(self._get_packet_for_command(MIXED_BWD_FWD,command_data))
 
   def goBackward(self,power_percent=0):
     pwr = min(80,max(0,power_percent))
-    logging.getLogger(__name__).info("motor goBackward - {}% power".format(pwr))
+    logging.getLogger(__name__).debug("motor goBackward - {}% power".format(pwr))
     #command_data = MIXED_BWD_MIN - 0.01 * pwr * (MIXED_FWD_MIN - MIXED_FWD_MAX)
     command_data = MIXED_BWD_MIN - 0.01 * pwr * (MIXED_BWD_MIN - MIXED_BWD_MAX)
     self._send_packet(self._get_packet_for_command(MIXED_BWD_FWD,command_data))
 
   def goRight(self,power_percent=0):
     pwr = min(80,max(0,power_percent))
-    logging.getLogger(__name__).info("motor goRight - {}% power".format(pwr))
+    logging.getLogger(__name__).debug("motor goRight - {}% power".format(pwr))
     command_data = MIXED_R_MIN + 0.01 * pwr * (MIXED_R_MAX - MIXED_R_MIN)
     self._send_packet(self._get_packet_for_command(MIXED_LR_TURN,command_data))
   
   def goLeft(self,power_percent=0):
     pwr = min(80,max(0,power_percent))
-    logging.getLogger(__name__).info("motor goLeft - {}% power".format(pwr))
+    logging.getLogger(__name__).debug("motor goLeft - {}% power".format(pwr))
     command_data = MIXED_L_MIN - 0.01 * pwr * (MIXED_L_MIN - MIXED_L_MAX)
     self._send_packet(self._get_packet_for_command(MIXED_LR_TURN,command_data))
 
   def goStraight(self):
-    logging.getLogger(__name__).info("motor goStraight")
+    logging.getLogger(__name__).debug("motor goStraight")
     self._send_packet(self._get_packet_for_command(MIXED_LR_TURN,MIXED_LR_STRAIGHT))
   # ---- End of Main External Methods for Affecting Moter Behavior ----
 

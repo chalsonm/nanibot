@@ -55,7 +55,7 @@ import time
 import sys
 import os
 import inspect
-from flask import Flask, Response, render_template
+from flask import Flask, Response, render_template, request
 
 # configure root logger so messages form other libraries are handled
 logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(levelname)s (%(name)s): %(message)s")
@@ -150,7 +150,12 @@ def feedback_control_system_sse():
 
         try:
             # Send the data to the connected client in HTML5 server sent event format.
-            data = {'setPoint': feedback_control_system.set_point()}
+            observation = feedback_control_system.get_corrected_observed_state()
+            data = {
+                'setPoint': feedback_control_system.set_point, 
+                'observedHeading': observation['heading'],
+                'observationTime': observation['validity_time']}
+            #data = {'setPoint': 123}
             yield 'data: {0}\n\n'.format(json.dumps(data))
         except:
             # This exception probably occurred because the rover is in Manual mode
@@ -206,6 +211,12 @@ def bno_calibration_path():
     # Return SSE response and call bno_calibration_sse function to stream sensor calibration
     # data to the webpage.
     return Response(bno_calibration_sse(), mimetype='text/event-stream')
+
+@app.route('/heading_seeker')
+def heading_seeker_path():
+    # Return SSE response and call feedback_control_system_sse function to stream heading seeker
+    # data to the webpage.
+    return Response(feedback_control_system_sse(), mimetype='text/event-stream')
 
 @app.route('/load_calibration', methods=['POST'])
 def load_calibration():
@@ -274,6 +285,8 @@ def start_feedback_control_system():
 
     # Lookup current heading
     state = heading_estimator.getCurrentState()
+    initial_state = state['heading']
+    #initial_state = 0
     # TODO: add getter to motor_controller
     initial_forward_speed = motor_controller._currentFwdBwdSetting
 
@@ -284,7 +297,7 @@ def start_feedback_control_system():
         FEEDBACK_CONTROLLER_P_GAIN, #proportional_gain
         0.0, # integral_gain
         measurement_offset=0,
-        initial_state=state['heading'],
+        initial_state=initial_state,
         nominal_forward_power=initial_forward_speed,
         verbose=False)
     return 'OK'
@@ -293,6 +306,29 @@ def start_feedback_control_system():
 def suspend_feedback_control_system():
     global feedback_control_system
     feedback_control_system = None
+    return 'OK'
+
+@app.route('/adjust_feedback_control_setpoint', methods=['POST'])
+def adjust_feedback_control_setpoint():
+    global feedback_control_system
+    adjustment = float(request.form['adjustment']) 
+    logging.getLogger(__name__).info("adjust setpoint by: {}".format(adjustment)) 
+    feedback_control_system.update_set_point(adjustment + feedback_control_system.set_point)
+    return 'OK'
+
+@app.route('/adjust_feedback_control_setpoint_to_zero', methods=['POST'])
+def adjust_feedback_control_setpoint_to_zero():
+    global feedback_control_system
+    logging.getLogger(__name__).info("adjust setpoint to 0") 
+    feedback_control_system.update_set_point(0)
+    return 'OK'
+
+@app.route('/reset_feedback_control_measurement_offset', methods=['POST'])
+def reset_feedback_control_measurement_offset():
+    global feedback_control_system
+    heading = feedback_control_system.get_observed_state()['heading']
+    logging.getLogger(__name__).info("set measurement offset to {}".format(heading)) 
+    feedback_control_system.update_measurement_offset(heading)
     return 'OK'
 
 @app.route('/')

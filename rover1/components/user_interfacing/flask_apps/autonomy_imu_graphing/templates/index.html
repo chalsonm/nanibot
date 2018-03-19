@@ -29,8 +29,8 @@
             </div>
           </div>
         </div>
-        <div class="row" id="controls">
-          <div class="col-sm-4">
+        <div class="row" id="manual_controls">
+          <div class="col-sm-6">
             <h3>Manual Override</h3>
             <form>
               <div class="form-row">
@@ -65,7 +65,9 @@
               </div>
             </form>
           </div>
-          <div class="col-sm-4">
+        </div>
+        <div class="row" id="auto_controls">
+          <div class="col-sm-6">
             <h3>Autonomous Mission</h3>
             <form>
               <div class="form-row">
@@ -80,9 +82,49 @@
               </div>
             </form>
           </div>
-          <div class="col-sm-4">
+          <div class="col-sm-6">
             <h3>Mission Parameters</h3>
             <!-- Add element to be auto-generated based on selected Mission --> 
+            <h4><span id="missionParametersHeading">Manual Control Active</span></h4>
+            <form class="form-horizontal" onsubmit="return false;">
+              <!--Wrap in fieldset because I think I want multi-page panel here, implemented in multiple fieldsets -->
+              <fieldset id="headingSeekerFieldset1" class="hide">
+                <div class="form-group form-group-md">
+                  <label class="col-sm-4 control-label">Measurement</label>
+                  <div class="col-sm-4">
+                    <p class="form-control-static"><span id="headingObservation"></span></p>
+                  </div>
+                  <div class="col-sm-4">
+                    <button type="botton" class="btn btn-primary" id="setHeadingOffset">Reset</button>
+                  </div>
+                </div>
+                <div class="form-group form-group-md">
+                  <label class="col-sm-4 control-label">Setpoint</label>
+                  <div class="col-sm-4">
+                    <p class="form-control-static"><span id="headingSetPoint"></span></p>
+                  </div>
+                  <div class="col-sm-4">
+                    <button type="botton" class="btn btn-primary" id="zeroSetpoint">Zero</button>
+                  </div>
+                </div>
+                <div class="form-group form-group-md">
+                  <label class="col-sm-4 control-label">Adjust Setpoint</label>
+                  <div class="col-sm-4">
+                    <select class="form-control" id="adjustSetpointSelect">
+                      <option value="45">+45</option>
+                      <option value="10">+10</option>
+                      <option value="1">+1</option>
+                      <option value="-1">-1</option>
+                      <option value="-10">-10</option>
+                      <option value="-45">-45</option>
+                    </select>
+                  </div>
+                  <div class="col-sm-4">
+                    <button type="botton" class="btn btn-primary" id="adjustSetpoint">Adjust</button>
+                  </div>
+                </div>
+              </fieldset>
+            </form>
           </div>
         </div>
         <div class="row" id="configuration">
@@ -109,7 +151,7 @@
             <h4>Magnetometer = <span id="calMag">0</span></h4>
           </div>
           <div class="col-sm-6">
-            <h3>Orientation (degrees)</h3>
+            <h3>Sensor Measurements (degrees)</h3>
             <form>
               <div class="form-row">
                 <div class="form-group">
@@ -214,6 +256,7 @@
         var startTimeMilliSec = Date.now();
         var headingOffset = 0;
         var bnoData = null;
+        var headingSeekerData = null;
         var offset = null;
         var orientation = null;
         var objMTLLoader = new THREE.OBJMTLLoader();
@@ -222,7 +265,7 @@
         var timeChartRef = null;
 
         // Start with main controls hidden until connected.
-        //$('#controls').hide();
+        //$('#manual_controls').hide();
 
         // Setup Three.js scene and camera.
         var scene = new THREE.Scene();
@@ -390,11 +433,35 @@
         // Suspend autonomy
         $('#suspendAutonomy').click(function() {
           $.post("{{ url_for('suspend_feedback_control_system') }}");
+          $('#missionParametersHeading').text("Manual Control Active");
+          $('#headingSetPoint').text("");
+          $('#headingObservation').text("");
+          $('#headingSeekerFieldset1').hide();
         });
 
         // Start heading seeker mission
         $('#startHeadingSeekerAutonomy').click(function() {
           $.post("{{ url_for('start_feedback_control_system') }}");
+          $('#missionParametersHeading').text("Heading Seeker Active");
+          $('#headingSetPoint').text("awaiting data");
+          $('#headingObservation').text("awaiting data");
+          $('#headingSeekerFieldset1').show();
+          $('#headingSeekerFieldset1').removeClass("hide");
+        });
+
+        // Reset heading offset button click handler.
+        $('#setHeadingOffset').click(function() {
+          $.post("{{ url_for('reset_feedback_control_measurement_offset') }}");
+        });
+
+        // Zero setpoint button click handler.
+        $('#zeroSetpoint').click(function() {
+          $.post("{{ url_for('adjust_feedback_control_setpoint_to_zero') }}");
+        });
+
+        // Adjust setpoint button click handler.
+        $('#adjustSetpoint').click(function() {
+          $.post("{{ url_for('adjust_feedback_control_setpoint') }}", {adjustment: $('#adjustSetpointSelect').val()});
         });
 
         // Load sensor calibration button click handler.
@@ -432,11 +499,11 @@
         server.onopen = function(e) {
           // Hide connecting status and show controls when connection is made.
           $('#connecting').hide();
-          //$('#controls').show();
+          //$('#manual_controls').show();
         };
         server.onerror = function(e) {
           // Hide controls and show connecting status if connection closes.
-          //$('#controls').hide();
+          //$('#manual_controls').hide();
           $('#connecting').show();
         };
         
@@ -456,6 +523,22 @@
         calibration_server.onmessage = function(e) {
           // Update BNO sensor values.
           updateSensorCalibrationData(JSON.parse(e.data));
+        };
+        
+        // Function called when a new heading seeker update is received.
+        function updateHeadingSeekerData(data) {
+          // Save the reading then update the UI.
+          headingSeekerData = data;
+          $('#headingSetPoint').text(data.setPoint);
+          $('#headingObservation').text(data.observedHeading);
+        }
+
+        // Create server sent event connection to receive BNO sensor data.
+        var heading_seeker_server = new EventSource('/heading_seeker');
+        // Add server sent event handlers.
+        heading_seeker_server.onmessage = function(e) {
+          // Update heading seeker values.
+          updateHeadingSeekerData(JSON.parse(e.data));
         };
       });
       </script>
